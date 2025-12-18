@@ -1,0 +1,46 @@
+{
+  "name": "botbrowser-mcp",
+  "version": "0.1.4",
+  "description": "Enhanced browser automation MCP server based on Playwright",
+  "author": "tonwe",
+  "license": "Apache-2.0",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "botbrowser-mcp": "bin/botbrowser-mcp.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "readme.md"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "playwright",
+    "browser-automation",
+    "bot",
+    "stealth"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tonwe/botbrowser-mcp.git"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node bin/botbrowser-mcp.js",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@playwright/mcp": "^0.0.52",
+    "playwright": "^1.49.0",
+    "playwright-core": "^1.49.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
