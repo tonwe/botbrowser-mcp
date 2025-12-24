@@ -1,63 +1,126 @@
+#!/usr/bin/env node
+
 /**
- * botbrowser-mcp 主入口
+ * BotBrowser-MCP Server 主入口
  */
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
+import { initDatabase } from './db/database.js';
+import { PlaywrightManager } from './playwright/manager.js';
+import { profileTools } from './tools/profile.js';
+import { accountTools } from './tools/account.js';
+import { instanceTools, setManager as setInstanceManager } from './tools/instance.js';
+import { PlaywrightMCPProxy } from './tools/playwright-mcp-proxy.js';
 
-import { createConnection as createPlaywrightConnection } from '@playwright/mcp';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import type { BrowserContext } from 'playwright';
+// 初始化数据库
+initDatabase();
 
-interface BotBrowserConfig {
-  botMode?: boolean;
-  stealth?: boolean;
-  customHeaders?: Record<string, string>;
-  [key: string]: any;
+// 创建 Playwright 管理器并导出（供 playwright-mcp-proxy 访问）
+export const manager = new PlaywrightManager();
+setInstanceManager(manager);
+
+// 创建 Playwright MCP 代理并导出为全局变量（供 switch_browser_instance 使用）
+export const playwrightMCPProxy = new PlaywrightMCPProxy(async () => {
+  const context = manager.getActiveContext();
+  if (!context) {
+    throw new Error('没有活跃的浏览器实例，请先使用 launch_instance 启动');
+  }
+  return context;
+});
+
+// 初始化工具
+let allTools: Record<string, any> = {};
+
+async function initializeTools() {
+  // 初始化 Playwright MCP 代理
+  await playwrightMCPProxy.initialize();
+  
+  // 获取 Playwright MCP 的所有工具
+  const playwrightTools = playwrightMCPProxy.getToolDefinitions();
+  
+  // 合并所有工具
+  allTools = {
+    ...profileTools,
+    ...accountTools,
+    ...instanceTools,
+    ...playwrightTools, // 完整的 Playwright MCP 工具集
+  };
 }
 
-/**
- * 创建增强的 MCP 连接
- */
-export async function createConnection(
-  userConfig: BotBrowserConfig = {},
-  contextGetter?: any
-): Promise<Server> {
-  const config: any = { ...userConfig };
-  
-  // Bot mode 优化
-  if (userConfig.botMode) {
-    config.browser = config.browser || {};
-    config.browser.launchOptions = config.browser.launchOptions || {};
-    config.browser.launchOptions.args = [
-      ...(config.browser.launchOptions.args || []),
-      '--disable-blink-features=AutomationControlled',
-    ];
+// 创建 MCP Server
+const server = new Server(
+  {
+    name: 'botbrowser-mcp',
+    version: '1.0.0',
+  },
+  {
+    capabilities: {
+      tools: {},
+    },
   }
-  
-  // Stealth mode
-  if (userConfig.stealth) {
-    config.browser = config.browser || {};
-    config.browser.launchOptions = config.browser.launchOptions || {};
-    config.browser.launchOptions.args = [
-      ...(config.browser.launchOptions.args || []),
-      '--disable-blink-features=AutomationControlled',
-      '--disable-dev-shm-usage',
-    ];
-    
-    config.browser.contextOptions = config.browser.contextOptions || {};
-    if (!config.browser.contextOptions.userAgent) {
-      config.browser.contextOptions.userAgent = 
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-    }
+);
+
+// 注册工具列表处理
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return {
+    tools: Object.entries(allTools).map(([name, tool]) => ({
+      name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    })),
+  };
+});
+
+// 注册工具调用处理
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const toolName = request.params.name;
+  const tool = allTools[toolName as keyof typeof allTools];
+
+  if (!tool) {
+    throw new Error(`未知工具: ${toolName}`);
   }
-  
-  // 自定义请求头
-  if (userConfig.customHeaders) {
-    config.browser = config.browser || {};
-    config.browser.contextOptions = config.browser.contextOptions || {};
-    config.browser.contextOptions.extraHTTPHeaders = {
-      ...(config.browser.contextOptions.extraHTTPHeaders || {}),
-      ...userConfig.customHeaders,
+
+  try {
+    return await tool.handler(request.params.arguments || {});
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `错误: ${error instanceof Error ? error.message : String(error)}`,
+      }],
+      isError: true,
     };
   }
+});
+
+// 启动服务器
+async function main() {
+  // 初始化所有工具
+  await initializeTools();
   
-  return createPlaywrightConnection(config, contextGetter);
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+
+  // 优雅退出
+  process.on('SIGINT', async () => {
+    await playwrightMCPProxy.close();
+    await manager.stopAll();
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', async () => {
+    await playwrightMCPProxy.close();
+    await manager.stopAll();
+    process.exit(0);
+  });
 }
+
+main().catch((error) => {
+  console.error('Server error:', error);
+  process.exit(1);
+});
+

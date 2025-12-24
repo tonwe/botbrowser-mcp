@@ -1,10 +1,10 @@
 {
   "name": "botbrowser-mcp",
-  "version": "0.1.4",
-  "description": "Enhanced browser automation MCP server based on Playwright",
+  "version": "0.1.9",
+  "description": "Multi-instance browser automation MCP server with profile and account management",
   "author": "tonwe",
   "license": "Apache-2.0",
-  "type": "commonjs",
+  "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -20,8 +20,8 @@
     "model-context-protocol",
     "playwright",
     "browser-automation",
-    "bot",
-    "stealth"
+    "multi-instance",
+    "profile-management"
   ],
   "repository": {
     "type": "git",
@@ -35,11 +35,12 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "@playwright/mcp": "^0.0.52",
-    "playwright": "^1.49.0",
-    "playwright-core": "^1.49.0"
+    "@playwright/mcp": "^0.0.53",
+    "better-sqlite3": "^11.0.0",
+    "playwright": "^1.49.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2"
   }
