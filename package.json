@@ -1,6 +1,6 @@
 {
   "name": "botbrowser-mcp",
-  "version": "0.1.9",
+  "version": "1.0.1",
   "description": "Multi-instance browser automation MCP server with profile and account management",
   "author": "tonwe",
   "license": "Apache-2.0",

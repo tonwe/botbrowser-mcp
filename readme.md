@@ -2,7 +2,10 @@
 
 多实例浏览器自动化 MCP Server，集成 [@playwright/mcp](https://www.npmjs.com/package/@playwright/mcp) 的 22 个浏览器工具，支持配置管理、账号管理和多实例切换。
 
-**版本:** v0.1.6
+**版本:** v0.1.9  
+**平台:** Windows | Linux | macOS
+
+> 📖 查看 [平台兼容性说明](PLATFORM_COMPATIBILITY.md) 了解不同平台的配置差异
 
 ## 安装
 
@@ -43,8 +46,10 @@ npm install -g botbrowser-mcp
 
 1. **浏览器配置 (Profile)** - 定义浏览器启动参数
    - Chrome 可执行文件路径
-   - Cookie/LocalStorage 存储路径
+   - Cookie/LocalStorage 存储路径（可选）
+   - 用户数据目录（自动管理，存储缓存/扩展/设置等）
    - 代理设置
+   - **限制：同一 Profile 同时只能启动一个实例**
 
 2. **账号 (Account)** - 绑定到配置的用户账号
    - 平台标识（twitter, github 等）
@@ -54,6 +59,7 @@ npm install -g botbrowser-mcp
    - 基于某个配置启动
    - 可选关联某个账号
    - 同时只有一个实例为活跃状态
+   - 复用配置的 userDataDir（保留浏览器状态）
 
 ## 快速开始
 
@@ -63,7 +69,12 @@ npm install -g botbrowser-mcp
 # 1. 创建浏览器配置
 create_browser_profile(
   alias: "twitter-bot",
-  executable_path: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  # Windows 路径示例
+  executable_path: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  # Linux 路径示例
+  # executable_path: "/usr/bin/google-chrome",
+  # macOS 路径示例
+  # executable_path: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   storage_state_path: "/Users/me/.botbrowser/twitter_cookies.json"
 )
 
@@ -251,19 +262,45 @@ metadata: '{"password":"abc123","2fa":"JBSWY3DP","recovery":["c1","c2"]}'
 metadata: "密码是 abc123，双因素认证是 JBSWY3DP，备用邮箱 backup@gmail.com"
 ```
 
+### 用户数据目录管理
+
+**自动管理:**
+- 每个 Profile 使用固定的 userDataDir: `~/.botbrowser-mcp/user-data/{profile_alias}/`
+- 首次启动自动创建并存储到数据库
+- 停止实例时**不会删除** userDataDir，下次启动继续使用
+- 保留浏览器缓存、扩展、网站数据、会话等
+
+**双重状态保存:**
+1. **userDataDir** - 完整的浏览器状态（缓存、扩展、设置等）
+2. **storage_state_path** (可选) - 仅保存 Cookies 和 LocalStorage
+
+**多开限制:**
+- 同一 Profile 不能同时启动多个实例（Playwright 限制）
+- 需要多开请创建多个 Profile（可使用相同的 executable_path）
+
 ## 数据存储
 
-所有数据存储在: `~/.botbrowser-mcp/botbrowser.db` (SQLite)
+所有数据存储在: `~/.botbrowser-mcp/`
+
+**目录结构:**
+```
+~/.botbrowser-mcp/
+├── botbrowser.db              # SQLite 数据库
+└── user-data/                 # 浏览器用户数据目录
+    ├── twitter-bot/           # Profile: twitter-bot
+    ├── work-profile/          # Profile: work-profile
+    └── personal/              # Profile: personal
+```
 
 **数据库表:**
-- `browser_profiles` - 浏览器配置
+- `browser_profiles` - 浏览器配置（包含 user_data_dir）
 - `accounts` - 账号信息
 - `browser_instances` - 运行中的实例
 
 可使用 SQLite 客户端查看：
 ```bash
 sqlite3 ~/.botbrowser-mcp/botbrowser.db
-SELECT * FROM browser_profiles;
+SELECT alias, user_data_dir FROM browser_profiles;
 ```
 
 ## 常见问题
@@ -276,11 +313,28 @@ A: 可以！有两种方式：
    1. 在每个工具调用时指定 `instance_id` 参数（推荐）
    2. 使用 `switch_browser_instance` 切换活跃实例
 
-**Q: 什么时候需要使用 instance_id 参数？**  
-A: 当你需要频繁在多个浏览器之间切换操作时，使用 `instance_id` 更方便，避免反复调用 `switch_browser_instance`。
+**Q: 为什么同一个 Profile 不能多开？**  
+A: Playwright 的 `launchPersistentContext` 会锁定 userDataDir，同一目录只能被一个实例使用。如需多开，请创建多个 Profile。
+
+**Q: 如何实现多账号同时登录？**  
+A: 为每个账号创建独立的 Profile：
+```
+create_browser_profile(alias: "twitter-account1", ...)
+create_browser_profile(alias: "twitter-account2", ...)
+launch_browser(profile_alias: "twitter-account1")
+launch_browser(profile_alias: "twitter-account2")
+```
+
+**Q: userDataDir 什么时候清理？**  
+A: 不会自动清理。停止实例时保留 userDataDir 以便下次使用。如需清理，手动删除 `~/.botbrowser-mcp/user-data/{profile}/`。
 
 **Q: Cookie 什么时候保存？**  
-A: 停止实例时（`stop_browser_instance`）会自动保存到 `storage_state_path`。
+A: 
+   - userDataDir 中的数据实时保存
+   - storage_state_path（如果配置）在停止实例时保存
+
+**Q: 什么时候需要使用 instance_id 参数？**  
+A: 当你需要频繁在多个浏览器之间切换操作时，使用 `instance_id` 更方便，避免反复调用 `switch_browser_instance`。
 
 **Q: 孤立实例记录是什么？**  
 A: 如果程序异常退出，浏览器已关闭但数据库记录还在，使用 `cleanup_orphaned_instances` 清理。

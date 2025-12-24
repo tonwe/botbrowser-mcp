@@ -9,6 +9,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 
+// 用户数据目录，与数据库在同一位置
+const USER_DATA_BASE_DIR = path.join(os.homedir(), '.botbrowser-mcp', 'user-data');
+
 interface ManagedInstance {
   id: number;
   context: BrowserContext;
@@ -32,6 +35,14 @@ export class PlaywrightManager {
       throw new Error(`浏览器配置不存在: ${profileAlias}`);
     }
 
+    // 检查该 profile 是否已有运行中的实例（同一指纹不能多开）
+    const existingInstance = Array.from(this.instances.values()).find(
+      inst => inst.profileAlias === profileAlias
+    );
+    if (existingInstance) {
+      throw new Error(`Profile "${profileAlias}" already has a running instance (ID: ${existingInstance.id}). Cannot launch multiple instances with the same fingerprint.`);
+    }
+
     // 验证账号
     if (accountId) {
       const account = this.accountRepo.getById(accountId);
@@ -40,10 +51,18 @@ export class PlaywrightManager {
       }
     }
 
-    // 为每个实例创建独立的用户数据目录
-    const timestamp = Date.now();
-    const randomId = Math.random().toString(36).substring(7);
-    const userDataDir = path.join(os.tmpdir(), `botbrowser-${profileAlias}-${timestamp}-${randomId}`);
+    // 使用固定的 userDataDir（每个 profile 一个目录）
+    let userDataDir = profile.user_data_dir;
+    
+    // 如果数据库中没有 userDataDir，创建并保存
+    if (!userDataDir) {
+      userDataDir = path.join(USER_DATA_BASE_DIR, profileAlias);
+      await fs.mkdir(USER_DATA_BASE_DIR, { recursive: true });
+      this.profileRepo.updateUserDataDir(profileAlias, userDataDir);
+    } else {
+      // 确保目录的父目录存在
+      await fs.mkdir(path.dirname(userDataDir), { recursive: true });
+    }
     
     // 使用传入的 launchOptions，如果没有则使用默认值
     const options: any = launchOptions || {};
@@ -159,12 +178,7 @@ export class PlaywrightManager {
     // 关闭浏览器
     await instance.context.close();
 
-    // 清理用户数据目录
-    try {
-      await fs.rm(instance.userDataDir, { recursive: true, force: true });
-    } catch (err) {
-      console.error(`清理用户数据目录失败: ${instance.userDataDir}`, err);
-    }
+    // 注意：不再删除 userDataDir，保留以便下次使用
 
     // 从内存和数据库删除
     this.instances.delete(instanceId);

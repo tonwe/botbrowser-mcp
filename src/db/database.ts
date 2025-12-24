@@ -29,6 +29,7 @@ export function initDatabase() {
       executable_path TEXT NOT NULL,
       fingerprint_path TEXT,
       storage_state_path TEXT,
+      user_data_dir TEXT,
       description TEXT,
       proxy_server TEXT,
       proxy_username TEXT,
@@ -38,6 +39,13 @@ export function initDatabase() {
       last_used TEXT
     )
   `);
+
+  // 迁移：为现有表添加 user_data_dir 字段（如果不存在）
+  try {
+    db.exec(`ALTER TABLE browser_profiles ADD COLUMN user_data_dir TEXT`);
+  } catch (error) {
+    // 字段已存在，忽略错误
+  }
 
   // 账号表
   db.exec(`

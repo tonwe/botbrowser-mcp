@@ -8,6 +8,7 @@ export interface BrowserProfile {
   executable_path: string;
   fingerprint_path?: string;
   storage_state_path?: string;
+  user_data_dir?: string;
   description?: string;
   proxy_server?: string;
   proxy_username?: string;
@@ -29,15 +30,17 @@ export class ProfileRepository {
   create(profile: Omit<BrowserProfile, 'created_at' | 'last_used'>): void {
     const stmt = db.prepare(`
       INSERT INTO browser_profiles (
-        alias, executable_path, fingerprint_path, storage_state_path,
+        alias, executable_path, fingerprint_path, storage_state_path, user_data_dir,
         description, proxy_server, proxy_username, proxy_password, proxy_bypass
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     stmt.run(
       profile.alias,
       profile.executable_path,
       profile.fingerprint_path || null,
+      profile.storage_state_path || null,
+      profile.user_data_dir || null,
       profile.storage_state_path || null,
       profile.description || null,
       profile.proxy_server || null,
@@ -70,5 +73,9 @@ export class ProfileRepository {
 
   updateLastUsed(alias: string): void {
     db.prepare("UPDATE browser_profiles SET last_used = datetime('now') WHERE alias = ?").run(alias);
+  }
+
+  updateUserDataDir(alias: string, userDataDir: string): void {
+    db.prepare('UPDATE browser_profiles SET user_data_dir = ? WHERE alias = ?').run(userDataDir, alias);
   }
 }
