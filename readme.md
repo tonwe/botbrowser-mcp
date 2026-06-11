@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/tonwe-botbrowser-mcp-badge.png)](https://mseep.ai/app/tonwe-botbrowser-mcp)
+
 # BotBrowser MCP
 
 多实例浏览器自动化 MCP Server，集成 [@playwright/mcp](https://www.npmjs.com/package/@playwright/mcp) 的 22 个浏览器工具，支持配置管理、账号管理和多实例切换。
